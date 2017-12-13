@@ -1,24 +1,28 @@
 package main
 
 import (
-	"fmt"
-	"net/http"
-	"os/user"
-	"log"
-	"os"
 	"bufio"
+	"fmt"
+	"log"
+	"net/http"
 	"net/url"
+	"os"
+	"os/user"
 )
 
 func main() {
-	file := getRc();
+	file := getRc()
 	defer file.Close()
 	scanner := bufio.NewScanner(file)
+	str := make(chan string)
+	numSites := 0
 	for scanner.Scan() {
-		success := checksite(scanner.Text())
-		if (!success) {
-			fmt.Printf("%s is not a valid URL\n\n", scanner.Text())
-		}
+		go checksite(scanner.Text(), str)
+		numSites += 1
+	}
+
+	for i := 0; i < numSites; i++ {
+		fmt.Print(<-str)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -29,10 +33,10 @@ func main() {
 func getRc() *os.File {
 	usr, err := user.Current()
 	if err != nil {
-		log.Fatal( err )
+		log.Fatal(err)
 	}
 
-	rcFile := fmt.Sprintf("%s/%s", usr.HomeDir,  ".stillup")
+	rcFile := fmt.Sprintf("%s/%s", usr.HomeDir, ".stillup")
 	file, err := os.Open(rcFile)
 
 	if err != nil {
@@ -41,18 +45,17 @@ func getRc() *os.File {
 	return file
 }
 
-func checksite (site string) bool {
+func checksite(site string, str chan string) {
 	urlstring, err := url.ParseRequestURI(site)
 	if err != nil {
-		return false
+		str <- fmt.Sprintf("%s is not a valid URL\n\n", site)
 	}
 
 	resp, err := http.Get(site)
 
 	if err != nil {
-		fmt.Printf("[404] %s\n", urlstring.Hostname())
+		str <- fmt.Sprintf("[404] %s\n", urlstring.Hostname())
 	} else {
-		fmt.Printf("[%d] %s\n", resp.StatusCode, urlstring.Hostname())
+		str <- fmt.Sprintf("[%d] %s\n", resp.StatusCode, urlstring.Hostname())
 	}
-	return true
 }
